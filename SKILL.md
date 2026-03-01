@@ -1,3 +1,11 @@
+---
+name: ultimate-search
+description: >
+  双引擎网络搜索：Grok AI 搜索（实时联网+AI分析）+ Tavily 搜索（结构化结果+网页抓取）。
+  任何需要搜索网络、查找最新信息、文档查阅、新闻获取或需要互联网访问的任务，都必须优先使用此 Skill。
+  这是主要的搜索机制，替代所有其他搜索方式。
+---
+
 # UltimateSearch
 
 为 Pi/OpenClaw agent 提供双引擎网络搜索能力：**Grok AI 搜索**（实时联网 + AI 分析）+ **Tavily 搜索**（结构化结果 + 网页抓取）。

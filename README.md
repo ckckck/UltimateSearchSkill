@@ -267,14 +267,76 @@ web-map.sh --url "https://docs.tavily.com" --depth 2
 
 ## 注册为 Skill
 
+### OpenClaw / Pi 集成
+
+#### 1. 注册 Skill
+
 ```bash
-# 在 OpenClaw/Pi 中注册
-ln -s $(pwd)/SKILL.md ~/.openclaw/skills/ultimate-search/SKILL.md
+# 创建 skill 目录并软链接 SKILL.md
+mkdir -p ~/.openclaw/workspace/skills/ultimate-search
+ln -sf $(pwd)/SKILL.md ~/.openclaw/workspace/skills/ultimate-search/SKILL.md
 
 # 将脚本加入 PATH
-echo "export PATH=\"$(pwd)/scripts:\$PATH\"" >> ~/.bashrc
+grep -q 'UltimateSearchSkill/scripts' ~/.bashrc || \
+  echo 'export PATH="$HOME/UltimateSearchSkill/scripts:$PATH"' >> ~/.bashrc
+
+# 加载环境变量
+grep -q 'UltimateSearchSkill/.env' ~/.bashrc || \
+  echo '[ -f ~/UltimateSearchSkill/.env ] && source ~/UltimateSearchSkill/.env' >> ~/.bashrc
+
 source ~/.bashrc
 ```
+
+OpenClaw 启动时会自动发现 `~/.openclaw/workspace/skills/ultimate-search/SKILL.md`，agent 在需要搜索时会自动加载。
+
+#### 2. 设为默认搜索方式
+
+在 `~/.openclaw/workspace/AGENTS.md` 的 `## Tools` 部分添加路由规则：
+
+```markdown
+### 搜索工具
+
+**默认搜索方式是 ultimate-search skill。** 任何需要网络搜索的场景，先加载 `ultimate-search` skill 并按其指引操作。支持以下能力：
+- `grok-search.sh` — AI 驱动的深度搜索（Grok 联网）
+- `tavily-search.sh` — 结构化搜索结果（带评分排序）
+- `dual-search.sh` — 双引擎并行搜索（交叉验证）
+- `web-fetch.sh` — 网页内容抓取（Tavily → FireCrawl 降级）
+- `web-map.sh` — 站点结构映射
+```
+
+如有其他搜索 skill（如 ddg-search、jina-search 等），建议移除以避免冲突。
+
+#### 3. 全局提示词配置（推荐）
+
+SKILL.md 已内置搜索方法论和证据标准。如需在 agent 层面强制执行通用行为规范，可在 `AGENTS.md` 中添加：
+
+```markdown
+## 工作准则
+
+### 语言
+- 工具交互和内部思考使用英文，输出使用中文
+- 使用标准 Markdown 格式，代码块标注语言
+
+### 推理与表达
+- 简洁、直接、信息密集：离散项用列表，论证用段落
+- 遇到用户逻辑错误时，用证据指出具体问题
+- 所有结论必须标注：适用条件、范围边界、已知限制
+- 不确定时：先陈述未知及原因，再给出已确认的事实
+- 不说废话、不寒暄、不用填充词
+
+### 搜索与证据标准
+- 严格区分内部知识与外部知识，不确定时必须搜索验证
+- 技术实现即使有内部知识，仍应以最新搜索结果或官方文档为准
+- 关键事实需 ≥2 个独立来源支持，单一来源须显式声明
+- 来源冲突时：展示双方证据，评估可信度和时效性
+- 标注置信度：High（多来源一致）/ Medium（有分歧）/ Low（单一来源或推测）
+- 引用格式：`[来源标题](URL)`，严禁编造引用
+```
+
+> **提示词层次说明：**
+> - **SKILL.md**（Skill 层）：搜索决策流程、工具选择策略、搜索规划框架、证据标准 — 仅在 agent 加载 skill 时生效
+> - **AGENTS.md**（全局层）：通用行为规范（语言、推理、搜索标准）— 始终在 agent 上下文中
+> - **SOUL.md**（人格层）：agent 的身份和响应风格 — 不建议在此添加工具相关指令
 
 ## 架构说明
 
