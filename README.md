@@ -4,7 +4,10 @@
 
 ```
 用户提问 → Agent (SKILL.md 指导)
-                ├─ grok-search.sh  → grok2api (多Token聚合) → Grok 联网搜索
+                ├─ grok-search.sh  → OpenAI Compatible 后端（推荐）
+                │                   ├─ 已知 URL 自动增强（xAI / OpenRouter）
+                │                   └─ 未知 URL 普通兼容模式 / 手动覆盖
+                ├─ grok-search.sh  → grok2api (legacy/experimental)
                 ├─ tavily-search.sh → TavilyProxyManager (多Key聚合) → Tavily 搜索
                 ├─ web-fetch.sh    → Tavily Extract → FireCrawl Scrape (自动降级)
                 ├─ web-map.sh      → TavilyProxyManager → Tavily Map (站点映射)
@@ -13,7 +16,8 @@
 
 ## 特性
 
-- **双引擎搜索**：Grok（AI 联网搜索）+ Tavily（结构化搜索），互补协作
+- **统一兼容后端**：`grok-search.sh` 支持 OpenAI Compatible URL，已知 URL 可自动增强搜索
+- **双引擎搜索**：兼容后端搜索 + Tavily（结构化搜索），互补协作
 - **多账户聚合**：通过 grok2api 和 TavilyProxyManager 聚合多个账号，自动负载均衡
 - **FireCrawl 托底**：web-fetch 三级降级链（Tavily Extract → FireCrawl Scrape → 报错）
 - **Cloudflare 自动绕过**：FlareSolverr 自动获取并定期刷新 `cf_clearance`
@@ -41,6 +45,41 @@ cd UltimateSearchSkill
 cp .env.example .env
 ```
 
+### 推荐的 Grok 搜索配置
+
+`grok-search.sh` 现在优先支持统一的 `OpenAI Compatible` 配置：
+
+- `OPENAI_COMPATIBLE_BASE_URL`
+- `OPENAI_COMPATIBLE_API_KEY`
+- `OPENAI_COMPATIBLE_MODEL`
+- `OPENAI_COMPATIBLE_SEARCH_MODE`（可选）
+
+默认行为：
+
+- 已知 URL 自动增强：目前内建支持 `https://api.x.ai/v1` 与 `https://openrouter.ai/api/v1`
+- 未知 URL 不做自动探测，默认仅走普通兼容聊天
+- 如需对未知 URL 启用增强，可在同一配置块中手动设置 `OPENAI_COMPATIBLE_SEARCH_MODE`
+
+示例：
+
+```bash
+OPENAI_COMPATIBLE_BASE_URL=https://openrouter.ai/api/v1
+OPENAI_COMPATIBLE_API_KEY=你的key
+OPENAI_COMPATIBLE_MODEL=x-ai/grok-4.1-fast
+OPENAI_COMPATIBLE_SEARCH_MODE=
+```
+
+手动覆盖示例：
+
+```bash
+OPENAI_COMPATIBLE_BASE_URL=https://your-proxy.example.com/v1
+OPENAI_COMPATIBLE_API_KEY=你的key
+OPENAI_COMPATIBLE_MODEL=your-model
+OPENAI_COMPATIBLE_SEARCH_MODE=openrouter_web
+```
+
+> `grok2api` 仍然保留，但建议视为 legacy/experimental 方案，适用于已部署且仍需兼容的场景。
+
 ### 部署服务
 
 ```bash
@@ -58,7 +97,7 @@ docker compose up -d
 
 部署完成后，需要将各类 Key/Token 导入到对应服务中。
 
-### 1. 获取 Grok SSO Session Token
+### 1. 获取 Grok SSO Session Token（legacy/experimental）
 
 grok2api 需要 Grok 网页版的 **SSO Session Token**（JWT 格式），不是 API Key。
 
@@ -88,7 +127,7 @@ eyJhbGciOiJIUzI1NiJ9.zzz...（第3个账号）
 | Basic（免费） | 80 次 | 每 20 小时 |
 | Super（付费） | 140 次 | 每 2 小时 |
 
-### 2. 导入 Grok Token 到 grok2api
+### 2. 导入 Grok Token 到 grok2api（legacy/experimental）
 
 **方式一：使用 import-keys.sh 脚本（推荐）**
 
@@ -131,9 +170,9 @@ ssh -L 8100:127.0.0.1:8100 你的服务器
 
 > **注意**：Token Pool 名称必须是 `ssoBasic`（Basic 账号）或 `ssoSuper`（Super 账号），否则 grok2api 无法调度。
 
-### 3. Cloudflare 绕过（FlareSolverr）
+### 3. Cloudflare 绕过（FlareSolverr，legacy/experimental）
 
-grok2api 访问 Grok 官网时会被 Cloudflare 拦截（403）。项目已集成 **FlareSolverr** 来自动处理：
+grok2api 访问 Grok 官网时会被 Cloudflare 拦截（403）。项目已集成 **FlareSolverr** 来自动处理，但该链路仍可能因网页上游变化而失效：
 
 - FlareSolverr 使用无头 Chrome 自动通过 Cloudflare JS Challenge
 - **不需要 Grok 账号密码**，只需访问 grok.com 首页即可
@@ -251,7 +290,7 @@ bash scripts/web-fetch.sh --url "https://example.com"
 # 加载环境变量
 source .env
 
-# Grok AI 搜索
+# Grok / OpenAI Compatible 搜索
 grok-search.sh --query "FastAPI 最新特性"
 
 # Tavily 搜索
