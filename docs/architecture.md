@@ -37,12 +37,13 @@ Agent → Bash → grok-search.sh
                       ├─ 已知 URL → 自动增强搜索
                       │    ├─ xAI Responses API + web_search
                       │    └─ OpenRouter Responses API + web plugin
+                      │    └─ 若增强失败且普通聊天可用 → 保守降级到 chat/completions
                       ├─ 未知 URL → 普通兼容聊天模式
                       └─ grok2api (legacy/experimental)
                            → Grok Web (x.ai) 执行联网搜索
 ```
 
-关键特点：搜索策略 prompt 与后端能力解耦。`grok-search.sh` 保留统一的搜索方法论、时间注入和平台聚焦逻辑；已知兼容后端自动增强，未知兼容后端默认只走普通模式；`grok2api` 仅作为 legacy/experimental 兼容路径保留。
+关键特点：搜索策略 prompt 与后端能力解耦。`grok-search.sh` 保留统一的搜索方法论、时间注入和平台聚焦逻辑；已知兼容后端自动增强，增强失败时只允许向普通兼容聊天做保守降级；手动增强模式失败不隐式切换；统一输出结构可附带 `citations`、`degraded_from` 与 `realtime_warning`；`grok2api` 仅作为 legacy/experimental 兼容路径保留。
 
 ### Tavily 搜索流
 

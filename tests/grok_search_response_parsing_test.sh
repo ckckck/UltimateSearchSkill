@@ -78,5 +78,7 @@ assert_contains "$openrouter_output" '"content": "openrouter-response"'
 assert_contains "$openrouter_output" '"model": "openrouter-model"'
 assert_contains "$openrouter_output" '"mode": "openrouter_web"'
 assert_contains "$openrouter_output" '"input_tokens": 6'
+assert_contains "$openrouter_output" '"citations": ['
+assert_contains "$openrouter_output" '"url": "https://example.com/source"'
 
 echo "PASS: grok search response parsing"

@@ -51,6 +51,17 @@ detect_search_mode() {
   esac
 }
 
+is_auto_enhanced_mode() {
+  case "$1" in
+    xai_web_search|openrouter_web)
+      [[ -z "$OPENAI_COMPATIBLE_SEARCH_MODE" ]]
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 build_request_json() {
   local mode="$1"
 
@@ -125,6 +136,7 @@ extract_response_json() {
         content: (([.output[]? | select(.type == "message") | .content[]? | select(.type == "output_text") | (.text // .content)] | first) // .output_text),
         model: .model,
         usage: .usage,
+        citations: ([.output[]? | select(.type == "message") | .content[]? | .annotations[]? | select(.type == "url_citation")] // []),
         mode: $mode
       }'
       ;;
@@ -132,6 +144,43 @@ extract_response_json() {
       error_exit "未知搜索模式: $mode"
       ;;
   esac
+}
+
+perform_request() {
+  local endpoint="$1"
+  local request_json="$2"
+  local response http_code body
+
+  local curl_args=(
+    -s
+    -w "\n%{http_code}"
+    -X POST "$endpoint"
+    -H "Content-Type: application/json"
+    -d "$request_json"
+  )
+
+  # 兼容 legacy grok2api：仅在显式提供 key 时才发送 Bearer。
+  if [[ -n "$GROK_API_KEY" ]]; then
+    curl_args+=(-H "Authorization: Bearer $GROK_API_KEY")
+  fi
+
+  response=$(curl "${curl_args[@]}")
+  http_code=$(echo "$response" | tail -1)
+  body=$(echo "$response" | sed '$d')
+
+  printf '%s\n%s' "$http_code" "$body"
+}
+
+build_error_message() {
+  local http_code="$1"
+  local body="$2"
+  local extra_hint=""
+
+  if [[ "$body" == *"AppChatReverse"* || "$body" == *"upstream_error"* ]]; then
+    extra_hint='；这通常不是 GROK_API_KEY 配错，而是上游 Grok 会话/SSO Token、代理链路或 Cloudflare 校验失败，请优先检查 export_sso.txt 导入结果、grok2api token 池和 cf_clearance'
+  fi
+
+  printf '%s' "API 请求失败 (HTTP $http_code): $body$extra_hint"
 }
 
 usage() {
@@ -145,6 +194,18 @@ Grok AI 智能搜索 — 通过 Grok 模型的联网能力进行 AI 驱动搜索
   --platform "平台"      可选，聚焦平台（如 Twitter, GitHub, Reddit）
   --model "模型"         可选，覆盖默认模型 ($GROK_MODEL)
   --help                 显示此帮助信息
+
+环境变量:
+  OPENAI_COMPATIBLE_BASE_URL     推荐的统一兼容后端入口
+  OPENAI_COMPATIBLE_API_KEY      统一兼容后端 API Key
+  OPENAI_COMPATIBLE_MODEL        统一兼容后端模型名
+  OPENAI_COMPATIBLE_SEARCH_MODE  可选：none / xai_web_search / openrouter_web
+  GROK_API_URL                   legacy grok2api 入口
+  GROK_API_KEY                   legacy grok2api Bearer，仅在配置 app.api_key 时需要
+
+说明:
+  已知 URL（xAI / OpenRouter）会自动增强搜索；未知 URL 默认走普通兼容聊天。
+  grok2api 仍保留为 legacy/experimental 路径。
 
 示例:
   $(basename "$0") --query "FastAPI 最新用法"
@@ -249,31 +310,26 @@ if [[ "$SEARCH_MODE" == "xai_web_search" || "$SEARCH_MODE" == "openrouter_web" ]
   API_ENDPOINT="$API_BASE_URL/responses"
 fi
 
-# 调用 API
-CURL_ARGS=(
-  -s
-  -w "\n%{http_code}"
-  -X POST "$API_ENDPOINT"
-  -H "Content-Type: application/json"
-  -d "$REQUEST_JSON"
-)
-
-# 兼容 legacy grok2api：仅在显式提供 key 时才发送 Bearer。
-if [[ -n "$GROK_API_KEY" ]]; then
-  CURL_ARGS+=(-H "Authorization: Bearer $GROK_API_KEY")
-fi
-
-RESPONSE=$(curl "${CURL_ARGS[@]}")
-
-HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-BODY=$(echo "$RESPONSE" | sed '$d')
+HTTP_AND_BODY="$(perform_request "$API_ENDPOINT" "$REQUEST_JSON")"
+HTTP_CODE="$(echo "$HTTP_AND_BODY" | head -1)"
+BODY="$(echo "$HTTP_AND_BODY" | tail -n +2)"
 
 if [[ "$HTTP_CODE" -ne 200 ]]; then
-  EXTRA_HINT=""
-  if [[ "$BODY" == *"AppChatReverse"* || "$BODY" == *"upstream_error"* ]]; then
-    EXTRA_HINT='；这通常不是 GROK_API_KEY 配错，而是上游 Grok 会话/SSO Token、代理链路或 Cloudflare 校验失败，请优先检查 export_sso.txt 导入结果、grok2api token 池和 cf_clearance'
+  if is_auto_enhanced_mode "$SEARCH_MODE"; then
+    FALLBACK_MODE='openai_compatible_chat'
+    FALLBACK_REQUEST_JSON="$(build_request_json "$FALLBACK_MODE")"
+    FALLBACK_ENDPOINT="$API_BASE_URL/chat/completions"
+    FALLBACK_HTTP_AND_BODY="$(perform_request "$FALLBACK_ENDPOINT" "$FALLBACK_REQUEST_JSON")"
+    FALLBACK_HTTP_CODE="$(echo "$FALLBACK_HTTP_AND_BODY" | head -1)"
+    FALLBACK_BODY="$(echo "$FALLBACK_HTTP_AND_BODY" | tail -n +2)"
+
+    if [[ "$FALLBACK_HTTP_CODE" -eq 200 ]]; then
+      extract_response_json "$FALLBACK_MODE" "$FALLBACK_BODY" | jq --arg degraded_from "$SEARCH_MODE" --arg warning 'provider native web search unavailable; downgraded to plain compatible chat' '. + {degraded_from: $degraded_from, realtime_warning: $warning}'
+      exit 0
+    fi
   fi
-  error_exit "API 请求失败 (HTTP $HTTP_CODE): $BODY$EXTRA_HINT"
+
+  error_exit "$(build_error_message "$HTTP_CODE" "$BODY")"
 fi
 
 # 提取结果
