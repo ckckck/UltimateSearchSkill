@@ -33,20 +33,22 @@
 - **安全加固**：端口绑定 127.0.0.1，API 认证，SSH 隧道访问管理面板
 - **搜索方法论**：内置 GrokSearch MCP 的搜索规划框架和证据标准
 
-<table>
-  <tr>
-    <td width="88" align="center" valign="middle">
-      <a href="https://www.popai.pro">
-        <img src="https://popaife.s3.ap-southeast-1.amazonaws.com/other/logo_siderbar.svg" alt="PopAi logo" width="56" />
-      </a>
-    </td>
-    <td valign="middle">
-      <strong>推荐组合：UltimateSearchSkill × PopAi</strong><br/>
-      升级你的工作流：用 PopAi 一键把搜索结果整理成 PPT。<br/>
-      <a href="https://www.popai.pro">访问 PopAi</a>
-    </td>
-  </tr>
-</table>
+<div align="center">
+  <table>
+    <tr>
+      <td width="88" align="center" valign="middle">
+        <a href="https://www.popai.pro">
+          <img src="https://popaife.s3.ap-southeast-1.amazonaws.com/other/logo_siderbar.svg" alt="PopAi logo" width="56" />
+        </a>
+      </td>
+      <td valign="middle">
+        <strong>推荐组合：UltimateSearchSkill × PopAi</strong><br/>
+        升级你的工作流：用 PopAi 一键把搜索结果整理成 PPT。<br/>
+        <a href="https://www.popai.pro">访问 PopAi</a>
+      </td>
+    </tr>
+  </table>
+</div>
 
 ## 快速开始
 
