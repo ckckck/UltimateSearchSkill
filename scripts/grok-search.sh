@@ -40,7 +40,7 @@ EOF
 }
 
 error_exit() {
-  echo "{\"error\": \"$1\"}"
+  jq -Rn --arg error "$1" '{error: $error}'
   exit 1
 }
 
@@ -77,7 +77,6 @@ done
 
 [[ -z "$QUERY" ]] && error_exit "缺少必需参数 --query"
 [[ -z "$GROK_API_URL" ]] && error_exit "未设置 GROK_API_URL"
-[[ -z "$GROK_API_KEY" ]] && error_exit "未设置 GROK_API_KEY"
 
 # system prompt（来自 GrokSearch MCP 的 search_prompt）
 SYSTEM_PROMPT='# Core Instruction
@@ -139,17 +138,30 @@ REQUEST_JSON=$(jq -n \
   }')
 
 # 调用 API
-RESPONSE=$(curl -s -w "\n%{http_code}" \
-  -X POST "$GROK_API_URL/v1/chat/completions" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $GROK_API_KEY" \
-  -d "$REQUEST_JSON")
+CURL_ARGS=(
+  -s
+  -w "\n%{http_code}"
+  -X POST "$GROK_API_URL/v1/chat/completions"
+  -H "Content-Type: application/json"
+  -d "$REQUEST_JSON"
+)
+
+# grok2api 默认允许 api_key 为空；仅在显式配置了 app.api_key 时才需要携带 Bearer。
+if [[ -n "$GROK_API_KEY" ]]; then
+  CURL_ARGS+=(-H "Authorization: Bearer $GROK_API_KEY")
+fi
+
+RESPONSE=$(curl "${CURL_ARGS[@]}")
 
 HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 BODY=$(echo "$RESPONSE" | sed '$d')
 
 if [[ "$HTTP_CODE" -ne 200 ]]; then
-  error_exit "API 请求失败 (HTTP $HTTP_CODE): $BODY"
+  EXTRA_HINT=""
+  if [[ "$BODY" == *"AppChatReverse"* || "$BODY" == *"upstream_error"* ]]; then
+    EXTRA_HINT='；这通常不是 GROK_API_KEY 配错，而是上游 Grok 会话/SSO Token、代理链路或 Cloudflare 校验失败，请优先检查 export_sso.txt 导入结果、grok2api token 池和 cf_clearance'
+  fi
+  error_exit "API 请求失败 (HTTP $HTTP_CODE): $BODY$EXTRA_HINT"
 fi
 
 # 提取结果

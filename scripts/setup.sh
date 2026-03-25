@@ -45,7 +45,7 @@ ok "docker compose 可用"
 if [ ! -f .env ]; then
     cp .env.example .env
     warn ".env 已从模板创建，请编辑 .env 填入实际配置"
-    warn "特别注意修改 GROK2API_APP_KEY 和 GROK2API_API_KEY"
+    warn "特别注意核对 GROK2API_APP_KEY；GROK_API_KEY 仅在 grok2api 配置了 app.api_key 时才需要"
 fi
 
 # 加载环境变量

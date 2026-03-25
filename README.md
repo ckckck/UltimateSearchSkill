@@ -41,6 +41,14 @@ cd UltimateSearchSkill
 cp .env.example .env
 ```
 
+### 凭证边界
+
+- `export_sso.txt` / `sso` Cookie：这是 **Grok 网页会话凭证**，供 grok2api 访问 grok.com 使用。
+- `.env` 里的 `GROK_API_KEY`：这是 **本地 grok2api 的 Bearer Token**，只在你给 grok2api 配置了 `app.api_key` 时才需要。
+- `.env` 里的 `GROK2API_APP_KEY`：这是 **grok2api 管理后台密码**，供 `import-keys.sh` 和 `/v1/admin/*` 使用。
+
+如果看到 `AppChatReverse: Chat failed, 403` 这类上游报错，优先排查的是 `sso` token、token 池状态、代理链路和 `cf_clearance`，通常不是 `GROK_API_KEY` 填错。
+
 ### 部署服务
 
 ```bash
@@ -103,6 +111,8 @@ bash scripts/import-keys.sh
 - 获取 TavilyProxyManager 的 Master Key 并更新 `.env`
 - 导入 `.env` 中配置的 Tavily/FireCrawl Key
 
+如果 `.env` 里的 `GROK2API_APP_KEY` 与当前 grok2api 后台密码不一致，脚本会先尝试该值，再自动回退默认密码 `grok2api`。
+
 **方式二：通过 API 手动导入**
 
 ```bash
@@ -130,6 +140,14 @@ ssh -L 8100:127.0.0.1:8100 你的服务器
 ```
 
 > **注意**：Token Pool 名称必须是 `ssoBasic`（Basic 账号）或 `ssoSuper`（Super 账号），否则 grok2api 无法调度。
+
+### 2.1 配置 `GROK_API_KEY` 的正确方式
+
+`scripts/grok-search.sh` 调用的是本地 `grok2api` 的 `/v1/chat/completions`，不是直接调 Grok 官方接口。
+
+- 如果 grok2api 的 `app.api_key` 为空：`.env` 里的 `GROK_API_KEY` 可以留空。
+- 如果你在 grok2api 后台或 `config.toml` 中设置了 `app.api_key`：把同一个值填到 `.env` 的 `GROK_API_KEY`。
+- 不要把 `export_sso.txt` 里的 `sso` token 填到 `GROK_API_KEY`。
 
 ### 3. Cloudflare 绕过（FlareSolverr）
 

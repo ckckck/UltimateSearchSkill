@@ -29,13 +29,65 @@ set -a; source "$PROJECT_DIR/.env"; set +a
 
 GROK2API_PORT="${GROK2API_PORT:-8100}"
 TAVILY_PROXY_PORT="${TAVILY_PROXY_PORT:-8200}"
-GROK2API_APP_KEY="${GROK2API_APP_KEY:-grok2api}"
+GROK2API_APP_KEY="${GROK2API_APP_KEY:-}"
+DEFAULT_GROK2API_APP_KEY="grok2api"
+ACTIVE_GROK2API_APP_KEY=""
+
+grok_admin_request() {
+  local method="$1"
+  local endpoint="$2"
+  local key="$3"
+  local data="${4:-}"
+  local args=(
+    -s
+    -w "\n%{http_code}"
+    -X "$method" "http://127.0.0.1:$GROK2API_PORT$endpoint"
+    -H "Authorization: Bearer $key"
+  )
+
+  if [[ -n "$data" ]]; then
+    args+=(-H "Content-Type: application/json" -d "$data")
+  fi
+
+  curl "${args[@]}"
+}
+
+resolve_grok2api_app_key() {
+  local candidates=()
+  local result http_code
+
+  if [[ -n "$GROK2API_APP_KEY" ]]; then
+    candidates+=("$GROK2API_APP_KEY")
+  fi
+  if [[ "$GROK2API_APP_KEY" != "$DEFAULT_GROK2API_APP_KEY" ]]; then
+    candidates+=("$DEFAULT_GROK2API_APP_KEY")
+  fi
+
+  for candidate in "${candidates[@]}"; do
+    result=$(grok_admin_request GET "/v1/admin/tokens" "$candidate")
+    http_code=$(echo "$result" | tail -1)
+    if [[ "$http_code" -eq 200 ]]; then
+      ACTIVE_GROK2API_APP_KEY="$candidate"
+      if [[ -n "$GROK2API_APP_KEY" && "$candidate" != "$GROK2API_APP_KEY" ]]; then
+        warn "GROK2API_APP_KEY 校验失败，已回退到 grok2api 默认后台密码；建议同步更新 .env 或后台配置"
+      fi
+      return 0
+    fi
+  done
+
+  ACTIVE_GROK2API_APP_KEY="${GROK2API_APP_KEY:-$DEFAULT_GROK2API_APP_KEY}"
+  return 1
+}
 
 echo ""
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}  批量导入 Key 到服务${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
+
+if ! resolve_grok2api_app_key; then
+  warn "无法提前验证 grok2api 后台密码，后续管理接口调用可能失败"
+fi
 
 # ==========================================
 # 1. 导入 Grok SSO Tokens（从文件）
@@ -65,11 +117,7 @@ if [[ -f "$GROK_SSO_FILE" ]]; then
   TOKEN_COUNT=$(echo "$TOKENS_JSON" | jq 'length')
   info "发现 $TOKEN_COUNT 个 Grok Token，正在导入..."
 
-  RESULT=$(curl -s -w "\n%{http_code}" \
-    -X POST "http://127.0.0.1:$GROK2API_PORT/v1/admin/tokens" \
-    -H "Authorization: Bearer $GROK2API_APP_KEY" \
-    -H "Content-Type: application/json" \
-    -d "{\"ssoBasic\": $TOKENS_JSON}")
+  RESULT=$(grok_admin_request POST "/v1/admin/tokens" "$ACTIVE_GROK2API_APP_KEY" "{\"ssoBasic\": $TOKENS_JSON}")
 
   HTTP_CODE=$(echo "$RESULT" | tail -1)
   BODY=$(echo "$RESULT" | sed '$d')
@@ -184,10 +232,10 @@ echo ""
 
 # 检查 grok2api Token 数量
 GROK_TOKENS=$(curl -s \
-  -H "Authorization: Bearer $GROK2API_APP_KEY" \
+  -H "Authorization: Bearer $ACTIVE_GROK2API_APP_KEY" \
   "http://127.0.0.1:$GROK2API_PORT/v1/admin/tokens" 2>/dev/null || echo "{}")
 
-GROK_COUNT=$(echo "$GROK_TOKENS" | jq '[.[] | length] | add // 0' 2>/dev/null || echo "?")
+GROK_COUNT=$(echo "$GROK_TOKENS" | jq 'if type == "object" and (.error | not) then [to_entries[] | select(.value | type == "array") | .value | length] | add // 0 else 0 end' 2>/dev/null || echo "?")
 info "grok2api Token 数量: $GROK_COUNT"
 
 # 检查 TavilyProxyManager Key 数量
