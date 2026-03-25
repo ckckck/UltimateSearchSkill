@@ -15,9 +15,124 @@ if [[ -f "$SCRIPT_DIR/../.env" ]]; then
   done < "$SCRIPT_DIR/../.env"
 fi
 
-GROK_API_URL="${GROK_API_URL:-}"
-GROK_API_KEY="${GROK_API_KEY:-}"
-GROK_MODEL="${GROK_MODEL:-grok-4.1-fast}"
+OPENAI_COMPATIBLE_BASE_URL="${OPENAI_COMPATIBLE_BASE_URL:-}"
+OPENAI_COMPATIBLE_API_KEY="${OPENAI_COMPATIBLE_API_KEY:-}"
+OPENAI_COMPATIBLE_MODEL="${OPENAI_COMPATIBLE_MODEL:-}"
+OPENAI_COMPATIBLE_SEARCH_MODE="${OPENAI_COMPATIBLE_SEARCH_MODE:-}"
+
+GROK_API_URL="${OPENAI_COMPATIBLE_BASE_URL:-${GROK_API_URL:-}}"
+GROK_API_KEY="${OPENAI_COMPATIBLE_API_KEY:-${GROK_API_KEY:-}}"
+GROK_MODEL="${OPENAI_COMPATIBLE_MODEL:-${GROK_MODEL:-grok-4.1-fast}}"
+
+normalize_base_url() {
+  local url="$1"
+  url="${url%/}"
+  if [[ "$url" == */v1 ]]; then
+    printf '%s' "$url"
+  else
+    printf '%s/v1' "$url"
+  fi
+}
+
+detect_search_mode() {
+  local normalized_url="$1"
+
+  case "$OPENAI_COMPATIBLE_SEARCH_MODE" in
+    "") ;;
+    none) printf '%s' 'openai_compatible_chat'; return ;;
+    xai_web_search|openrouter_web) printf '%s' "$OPENAI_COMPATIBLE_SEARCH_MODE"; return ;;
+    *) error_exit "不支持的 OPENAI_COMPATIBLE_SEARCH_MODE: $OPENAI_COMPATIBLE_SEARCH_MODE" ;;
+  esac
+
+  case "$normalized_url" in
+    https://api.x.ai/v1) printf '%s' 'xai_web_search' ;;
+    https://openrouter.ai/api/v1) printf '%s' 'openrouter_web' ;;
+    *) printf '%s' 'openai_compatible_chat' ;;
+  esac
+}
+
+build_request_json() {
+  local mode="$1"
+
+  case "$mode" in
+    openai_compatible_chat)
+      jq -n \
+        --arg model "$MODEL" \
+        --arg system "$SYSTEM_PROMPT" \
+        --arg user "$USER_MESSAGE" \
+        '{
+          model: $model,
+          stream: false,
+          messages: [
+            { role: "system", content: $system },
+            { role: "user", content: $user }
+          ]
+        }'
+      ;;
+    xai_web_search)
+      jq -n \
+        --arg model "$MODEL" \
+        --arg system "$SYSTEM_PROMPT" \
+        --arg user "$USER_MESSAGE" \
+        '{
+          model: $model,
+          input: [
+            { role: "system", content: $system },
+            { role: "user", content: $user }
+          ],
+          tools: [
+            { type: "web_search" }
+          ]
+        }'
+      ;;
+    openrouter_web)
+      jq -n \
+        --arg model "$MODEL" \
+        --arg system "$SYSTEM_PROMPT" \
+        --arg user "$USER_MESSAGE" \
+        '{
+          model: $model,
+          input: [
+            { type: "message", role: "system", content: [{ type: "input_text", text: $system }] },
+            { type: "message", role: "user", content: [{ type: "input_text", text: $user }] }
+          ],
+          plugins: [
+            { id: "web" }
+          ]
+        }'
+      ;;
+    *)
+      error_exit "未知搜索模式: $mode"
+      ;;
+  esac
+}
+
+extract_response_json() {
+  local mode="$1"
+  local body="$2"
+
+  case "$mode" in
+    openai_compatible_chat)
+      echo "$body" | jq --arg mode "$mode" '{
+        content: .choices[0].message.content,
+        model: .model,
+        usage: .usage,
+        mode: $mode
+      }'
+      ;;
+    xai_web_search|openrouter_web)
+      echo "$body" | jq --arg mode "$mode" '{
+        content: (([.output[]? | select(.type == "message") | .content[]? | select(.type == "output_text") | (.text // .content)] | first) // .output_text),
+        model: .model,
+        usage: .usage,
+        mode: $mode
+      }'
+      ;;
+    *)
+      error_exit "未知搜索模式: $mode"
+      ;;
+  esac
+}
 
 usage() {
   cat <<EOF
@@ -79,6 +194,9 @@ done
 [[ -z "$GROK_API_URL" ]] && error_exit "未设置 GROK_API_URL"
 [[ -z "$GROK_API_KEY" ]] && error_exit "未设置 GROK_API_KEY"
 
+API_BASE_URL="$(normalize_base_url "$GROK_API_URL")"
+SEARCH_MODE="$(detect_search_mode "$API_BASE_URL")"
+
 # system prompt（来自 GrokSearch MCP 的 search_prompt）
 SYSTEM_PROMPT='# Core Instruction
 
@@ -125,22 +243,16 @@ You should focus on these platform: $PLATFORM"
 fi
 
 # 构建请求 JSON
-REQUEST_JSON=$(jq -n \
-  --arg model "$MODEL" \
-  --arg system "$SYSTEM_PROMPT" \
-  --arg user "$USER_MESSAGE" \
-  '{
-    model: $model,
-    stream: false,
-    messages: [
-      { role: "system", content: $system },
-      { role: "user", content: $user }
-    ]
-  }')
+REQUEST_JSON="$(build_request_json "$SEARCH_MODE")"
+
+API_ENDPOINT="$API_BASE_URL/chat/completions"
+if [[ "$SEARCH_MODE" == "xai_web_search" || "$SEARCH_MODE" == "openrouter_web" ]]; then
+  API_ENDPOINT="$API_BASE_URL/responses"
+fi
 
 # 调用 API
 RESPONSE=$(curl -s -w "\n%{http_code}" \
-  -X POST "$GROK_API_URL/v1/chat/completions" \
+  -X POST "$API_ENDPOINT" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $GROK_API_KEY" \
   -d "$REQUEST_JSON")
@@ -153,8 +265,4 @@ if [[ "$HTTP_CODE" -ne 200 ]]; then
 fi
 
 # 提取结果
-echo "$BODY" | jq '{
-  content: .choices[0].message.content,
-  model: .model,
-  usage: .usage
-}'
+extract_response_json "$SEARCH_MODE" "$BODY"
