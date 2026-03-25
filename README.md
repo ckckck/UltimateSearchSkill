@@ -5,7 +5,7 @@
 <p align="left">
   <img alt="GitHub stars" src="https://img.shields.io/github/stars/ckckck/UltimateSearchSkill?style=flat-square&label=Stars&color=111827" />
   <img alt="GitHub forks" src="https://img.shields.io/github/forks/ckckck/UltimateSearchSkill?style=flat-square&label=Forks&color=334155" />
-  <img alt="License" src="https://img.shields.io/github/license/ckckck/UltimateSearchSkill?style=flat-square&label=License&color=0f766e" />
+  <img alt="License" src="https://img.shields.io/badge/License-MIT-0f766e?style=flat-square" />
   <img alt="Shell" src="https://img.shields.io/badge/Shell-Bash-0ea5e9?style=flat-square" />
   <img alt="Docker" src="https://img.shields.io/badge/Infra-Docker-2563eb?style=flat-square" />
   <img alt="OpenAI Compatible" src="https://img.shields.io/badge/Search-OpenAI%20Compatible-f59e0b?style=flat-square" />
@@ -301,17 +301,4 @@ MIT
 
 ## Star History
 
-<picture>
-  <source
-    media="(prefers-color-scheme: dark)"
-    srcset="https://api.star-history.com/svg?repos=ckckck/UltimateSearchSkill&type=Date&theme=dark"
-  />
-  <source
-    media="(prefers-color-scheme: light)"
-    srcset="https://api.star-history.com/svg?repos=ckckck/UltimateSearchSkill&type=Date"
-  />
-  <img
-    alt="Star History Chart"
-    src="https://api.star-history.com/svg?repos=ckckck/UltimateSearchSkill&type=Date"
-  />
-</picture>
+[![Star History Chart](https://api.star-history.com/svg?repos=ckckck/UltimateSearchSkill&type=Date)](https://www.star-history.com/#ckckck/UltimateSearchSkill&Date)
