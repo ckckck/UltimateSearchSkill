@@ -1,6 +1,6 @@
 # UltimateSearchSkill
 
-<p align="center"><a href="./README.md">中文</a> | <a href="./README.en.md">English</a></p>
+<p align="center">中文 | <a href="./README.en.md">English</a></p>
 
 为 [OpenClaw](https://openclaw.ai/) / [Pi](https://github.com/badlogic/pi-mono/) AI Agent 打造的双引擎 Web 搜索技能。Grok AI + Tavily 双引擎交叉验证，纯 Shell 实现，零 MCP 依赖。
 

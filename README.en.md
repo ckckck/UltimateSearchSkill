@@ -1,6 +1,6 @@
 # UltimateSearchSkill
 
-<p align="center"><a href="./README.md">中文</a> | <a href="./README.en.md">English</a></p>
+<p align="center"><a href="./README.md">中文</a> | English</p>
 
 A dual-engine web search skill for [OpenClaw](https://openclaw.ai/) / [Pi](https://github.com/badlogic/pi-mono/) AI agents. It combines Grok AI and Tavily for cross-verification, is implemented in pure Shell, and has zero MCP dependency.
 
